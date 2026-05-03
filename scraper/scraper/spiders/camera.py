@@ -1,8 +1,6 @@
 from typing import Any
 from urllib.parse import urlparse, parse_qs
-
-import scrapy
-from scrapy import Request
+from scrapy import Request, Spider
 from scrapy.http import Response
 from scrapy.linkextractors import LinkExtractor
 
@@ -27,7 +25,7 @@ def parametro_from_url(url, param):
     return value
 
 
-class CameraSpider(scrapy.Spider):
+class CameraSpider(Spider):
     name = 'camera'
     allowed_domains = ['www.camera.it']
     start_urls = ['https://www.camera.it/deputati/elenco']
@@ -53,6 +51,7 @@ class CameraSpider(scrapy.Spider):
             leg = legislatura_from_url(link.url, 'leg')
             if leg in requested_leg:
                 requested_leg.remove(leg)
+            if self.is_requested(leg, None):
                 if leg != legislatura:
                     self.logger.info('link to legislatura %d, following it', leg)
                     new_requests.append(response.follow(link, callback=self.parse_legislatura_landing_page))
@@ -78,8 +77,9 @@ class CameraSpider(scrapy.Spider):
         for link in CameraSpider.list_by_letter_link_extractor.extract_links(response):
             legislatura = legislatura_from_url(link.url, 'leg')
             lettera = parametro_from_url(link.url, 'lettera')
-            if self.is_requested(legislatura, lettera):
+            if lettera in requested_lettere:
                 requested_lettere.remove(lettera)
+            if self.is_requested(legislatura, lettera):
                 if lettera != current_lettera:
                     self.logger.info('link to legislatura %d and lettera %s - following it', legislatura, lettera)
                     follow = response.follow(
@@ -93,7 +93,7 @@ class CameraSpider(scrapy.Spider):
                 else:
                     self.logger.debug('link to legislatura %d and lettera %s - ignoring it cause is landing lettera', legislatura. lettera)
             else:
-                self.logger.debug('link to legislatura %d and lettra %s - ignoring it cause was not requested', legislatura, lettera)
+                self.logger.debug('link to legislatura %d and lettera %s - ignoring it cause was not requested', legislatura, lettera)
         if requested_lettere:
             self.logger.warning('not found link to requested lettere %s for legislature %d', requested_lettere, legislatura)
         return new_requests
@@ -104,6 +104,7 @@ class CameraSpider(scrapy.Spider):
             self.logger.info('index for legislatura %d and lettra %s - searching deputy links', legislatura, lettera)
             link_extractor = LinkExtractor(allow=r"deputati\/elenco\/\d+-\d+$")
             for link in link_extractor.extract_links(response):
+                self.logger.info('link to deputy %s in legislatura %d - following it', link.text, legislatura)
                 follow = response.follow(
                     link,
                     callback=self.parse_deputato_page,
@@ -119,9 +120,17 @@ class CameraSpider(scrapy.Spider):
         nome_cognome = response.css('.deputato-nome::text').get().strip()
         self.logger.info('scraped deputy %s', nome_cognome)
         deputy = {
-            'nome': nome_cognome,
+            'nome_cognome': nome_cognome,
             'legislatura': legislatura
         }
+        anagrafica_prop = response.css('.scheda-anagrafica-container ul.left-column li')
+        for li in anagrafica_prop:
+            pname = li.css('span::text').get()
+            if pname.startswith('(IN SOSTITUZIONE DEL DEPUTATO') or pname.startswith('SOSTITUITO DA'):
+                pvalue = li.css('a::text').get()
+            else:
+                pvalue = li.css('strong::text').get()
+            deputy[pname] = pvalue
         return deputy
 
 
