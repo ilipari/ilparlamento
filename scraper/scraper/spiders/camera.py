@@ -3,6 +3,7 @@ from urllib.parse import urlparse, parse_qs
 from scrapy import Request, Spider
 from scrapy.http import Response
 from scrapy.linkextractors import LinkExtractor
+import re
 
 
 def normalize_requested_legislature(legislature, ultima_legislatura):
@@ -23,6 +24,17 @@ def parametro_from_url(url, param):
     params = parse_qs(urlparse(url).query)
     value = params.get(param, [None])[0]
     return value
+
+
+def parse_dates(riga, date_pattern=r"\d{1,2} \w+ \d{4}"):
+    dates = []
+    match = re.findall(date_pattern, riga)
+    if match:
+        # Converte le date in oggetti datetime
+        # dates = [parse_date(data, locale='it_IT', format='long') for data in match]
+        # dates = [datetime.strptime(data, "%d %B %Y") for data in match]
+        dates = [data for data in match]
+    return dates
 
 
 class CameraSpider(Spider):
@@ -102,27 +114,31 @@ class CameraSpider(Spider):
         new_requests = []
         if self.is_requested(legislatura, lettera):
             self.logger.info('index for legislatura %d and lettra %s - searching deputy links', legislatura, lettera)
-            link_extractor = LinkExtractor(allow=r"deputati\/elenco\/\d+-\d+$")
+            link_extractor = LinkExtractor(allow=r"deputati\/elenco\/\d+-\d+$", restrict_css='.deputato-info', strip=True)
             for link in link_extractor.extract_links(response):
-                self.logger.info('link to deputy %s in legislatura %d - following it', link.text, legislatura)
+                cognome_nome = link.text.strip()
+                self.logger.info('link to deputy %s in legislatura %d - following it', cognome_nome, legislatura)
                 follow = response.follow(
                     link,
                     callback=self.parse_deputato_page,
                     cb_kwargs={
-                        'legislatura': legislatura
+                        'legislatura': legislatura,
+                        'cognome_nome': cognome_nome
                     })
                 new_requests.append(follow)
         else:
             self.logger.debug('index for legislatura %d and lettra %s - ignoring it cause was not requested', legislatura, lettera)
         return new_requests
 
-    def parse_deputato_page(self, response: Response, legislatura):
+    def parse_deputato_page(self, response: Response, legislatura, cognome_nome):
         nome_cognome = response.css('.deputato-nome::text').get().strip()
         self.logger.info('scraped deputy %s', nome_cognome)
         deputy = {
             'nome_cognome': nome_cognome,
+            'cognome_nome': cognome_nome,
             'legislatura': legislatura
         }
+        # anagrafica
         anagrafica_prop = response.css('.scheda-anagrafica-container ul.left-column li')
         for li in anagrafica_prop:
             pname = li.css('span::text').get()
@@ -131,6 +147,23 @@ class CameraSpider(Spider):
             else:
                 pvalue = li.css('strong::text').get()
             deputy[pname] = pvalue
+        # gruppi parlamentari
+        panels = response.css('div.blue-div')
+        groups = []
+        for panel in panels:
+            panel_title = panel.css('h3::text').get()
+            if panel_title == 'GRUPPO PARLAMENTARE':
+                items = panel.css('li')
+                for item in items:
+                    spans = item.css('span')
+                    group = {
+                        'name': spans[0].css('::text').get()
+                    }
+                    dates = parse_dates(spans[1].css('::text').get())
+                    group['from_date'] = dates[0]
+                    group['to_date'] = dates[1] if len(dates) > 1 else None
+                    groups.append(group)
+        deputy['groups'] = groups
         return deputy
 
 
