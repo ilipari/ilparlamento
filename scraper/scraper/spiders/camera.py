@@ -1,5 +1,7 @@
 from typing import Any
 from urllib.parse import urlparse, parse_qs
+
+from dateparser import DateDataParser
 from scrapy import Request, Spider
 from scrapy.http import Response
 from scrapy.linkextractors import LinkExtractor
@@ -26,27 +28,18 @@ def parametro_from_url(url, param):
     return value
 
 
-def parse_dates(riga, date_pattern=r"\d{1,2} \w+ \d{4}"):
-    dates = []
-    match = re.findall(date_pattern, riga)
-    if match:
-        # Converte le date in oggetti datetime
-        # dates = [parse_date(data, locale='it_IT', format='long') for data in match]
-        # dates = [datetime.strptime(data, "%d %B %Y") for data in match]
-        dates = [data for data in match]
-    return dates
-
-
 class CameraSpider(Spider):
     name = 'camera'
     allowed_domains = ['www.camera.it']
     start_urls = ['https://www.camera.it/deputati/elenco']
     list_by_letter_link_extractor = LinkExtractor(allow=r'deputati\/elenco\?leg=\d+&lettera=[a-zA-Z]$')
+    date_parser = DateDataParser(languages=['it'])
 
     def __init__(self, *args, **kwargs):
         super(CameraSpider, self).__init__(*args, **kwargs)
-        self.legislature = [-1, 19, 20]
+        self.legislature = [0]
         self.lettere = ['K']
+        self.date_fields =['DATA DI NASCITA', 'ELEZIONE CONVALIDATA', 'PROCLAMAZIONE']
 
     async def start(self):
         for url in self.start_urls:
@@ -146,7 +139,11 @@ class CameraSpider(Spider):
                 pvalue = li.css('a::text').get()
             else:
                 pvalue = li.css('strong::text').get()
+            # date fields
+            if pname in self.date_fields:
+                pvalue = self.parse_dates(pvalue)[0]
             deputy[pname] = pvalue
+
         # gruppi parlamentari
         panels = response.css('div.blue-div')
         groups = []
@@ -159,7 +156,7 @@ class CameraSpider(Spider):
                     group = {
                         'name': spans[0].css('::text').get()
                     }
-                    dates = parse_dates(spans[1].css('::text').get())
+                    dates = self.parse_dates(spans[1].css('::text').get())
                     group['from_date'] = dates[0]
                     group['to_date'] = dates[1] if len(dates) > 1 else None
                     groups.append(group)
@@ -186,3 +183,17 @@ class CameraSpider(Spider):
         if lettera and self.lettere:
             requested = requested and lettera in self.lettere
         return requested
+
+    def parse_dates(self, riga, date_regex=r"\d{1,2} \w+ \d{4}", date_pattern='%d %B %Y'):
+        # Converte le date in oggetti date
+        dates = []
+        match = re.findall(date_regex, riga)
+        if match:
+            for m in match:
+                try:
+                    date = CameraSpider.date_parser.get_date_data(m, [date_pattern]).date_obj.date()
+                    dates.append(date)
+                except Exception as e:
+                    self.logger.exception('error parsing string %s', m)
+                    raise e
+        return dates
