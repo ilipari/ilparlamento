@@ -38,7 +38,7 @@ class CameraSpider(Spider):
     def __init__(self, *args, **kwargs):
         super(CameraSpider, self).__init__(*args, **kwargs)
         self.legislature = [0]
-        self.lettere = ['K']
+        self.lettere = ['Q']
         self.date_fields =['DATA DI NASCITA', 'ELEZIONE CONVALIDATA', 'PROCLAMAZIONE']
 
     async def start(self):
@@ -144,25 +144,32 @@ class CameraSpider(Spider):
                 pvalue = self.parse_dates(pvalue)[0]
             deputy[pname] = pvalue
 
-        # gruppi parlamentari
+        # gruppi ed incarichi parlamentari
+        deputy['gruppi'] = self.parse_simple_panel(response, 'GRUPPO PARLAMENTARE')
+        # deputy['incarichi_gruppi'] = self.parse_simple_panel(response, 'INCARICHI NEI GRUPPI PARLAMENTARI')
+        deputy['organi'] = self.parse_simple_panel(response, 'COMPONENTE DEGLI ORGANI PARLAMENTARI')
+        # deputy['uffici'] = self.parse_simple_panel(response, 'UFFICI PARLAMENTARI')
+        return deputy
+
+    def parse_simple_panel(self, response, title):
+        items = None
         panels = response.css('div.blue-div')
-        groups = []
         for panel in panels:
             panel_title = panel.css('h3::text').get()
-            if panel_title == 'GRUPPO PARLAMENTARE':
-                items = panel.css('li')
-                for item in items:
-                    spans = item.css('span')
-                    group = {
+            if panel_title == title:
+                items = []
+                # gruppi parlamentari
+                items_lis = panel.css('li')
+                for item_li in items_lis:
+                    spans = item_li.css('span')
+                    item = {
                         'name': spans[0].css('::text').get()
                     }
                     dates = self.parse_dates(spans[1].css('::text').get())
-                    group['from_date'] = dates[0]
-                    group['to_date'] = dates[1] if len(dates) > 1 else None
-                    groups.append(group)
-        deputy['groups'] = groups
-        return deputy
-
+                    item['from_date'] = dates[0]
+                    item['to_date'] = dates[1] if len(dates) > 1 else None
+                    items.append(item)
+        return items
 
     def get_legislatura_e_lettera(self, response: Response) -> Any:
         # ricava dalla pagina
