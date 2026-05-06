@@ -146,9 +146,9 @@ class CameraSpider(Spider):
 
         # gruppi ed incarichi parlamentari
         deputy['gruppi'] = self.parse_simple_panel(response, 'GRUPPO PARLAMENTARE')
-        # deputy['incarichi_gruppi'] = self.parse_simple_panel(response, 'INCARICHI NEI GRUPPI PARLAMENTARI')
+        deputy['gruppi_roles'] = self.parse_roles_panel(response, 'INCARICHI NEI GRUPPI PARLAMENTARI')
         deputy['organi'] = self.parse_simple_panel(response, 'COMPONENTE DEGLI ORGANI PARLAMENTARI')
-        # deputy['uffici'] = self.parse_simple_panel(response, 'UFFICI PARLAMENTARI')
+        deputy['organi_roles'] = self.parse_roles_panel(response, 'UFFICI PARLAMENTARI')
         return deputy
 
     def parse_simple_panel(self, response, title):
@@ -158,13 +158,37 @@ class CameraSpider(Spider):
             panel_title = panel.css('h3::text').get()
             if panel_title == title:
                 items = []
-                # gruppi parlamentari
                 items_lis = panel.css('li')
                 for item_li in items_lis:
                     spans = item_li.css('span')
                     item = {
                         'name': spans[0].css('::text').get()
                     }
+                    dates = self.parse_dates(spans[1].css('::text').get())
+                    item['from_date'] = dates[0]
+                    item['to_date'] = dates[1] if len(dates) > 1 else None
+                    items.append(item)
+        return items
+
+    def parse_roles_panel(self, response, title):
+        items = None
+        panels = response.css('div.blue-div')
+        for panel in panels:
+            panel_title = panel.css('h3::text').get()
+            if panel_title == title:
+                items = []
+                items_lis = panel.css('li')
+                for item_li in items_lis:
+                    spans = item_li.css('span')
+                    item = {
+                        'role': spans[0].css('strong::text').get()
+                    }
+                    link_text = spans[0].css('a::text').get()
+                    if link_text:
+                        item['office'] = link_text.strip()
+                    else:
+                        item['office'] = spans[0].css('::text').getall()[-1].strip()
+
                     dates = self.parse_dates(spans[1].css('::text').get())
                     item['from_date'] = dates[0]
                     item['to_date'] = dates[1] if len(dates) > 1 else None
