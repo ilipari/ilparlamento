@@ -38,7 +38,7 @@ class CameraSpider(Spider):
     def __init__(self, *args, **kwargs):
         super(CameraSpider, self).__init__(*args, **kwargs)
         self.legislature = [0]
-        self.lettere = ['Q']
+        self.lettere = []
         self.date_fields =['DATA DI NASCITA', 'ELEZIONE CONVALIDATA', 'PROCLAMAZIONE']
 
     async def start(self):
@@ -146,53 +146,76 @@ class CameraSpider(Spider):
 
         # gruppi ed incarichi parlamentari
         deputy['gruppi'] = self.parse_simple_panel(response, 'GRUPPO PARLAMENTARE')
-        deputy['gruppi_roles'] = self.parse_roles_panel(response, 'INCARICHI NEI GRUPPI PARLAMENTARI')
+        self.add_roles(response, 'INCARICHI NEI GRUPPI PARLAMENTARI', deputy['gruppi'])
         deputy['organi'] = self.parse_simple_panel(response, 'COMPONENTE DEGLI ORGANI PARLAMENTARI')
-        deputy['organi_roles'] = self.parse_roles_panel(response, 'UFFICI PARLAMENTARI')
+        self.add_roles(response, 'UFFICI PARLAMENTARI', deputy['organi'])
         return deputy
+
+    def find_panel(self, response, title):
+        panels = response.css('div.blue-div')
+        for panel in panels:
+            panel_title = panel.css('h3::text').get()
+            if panel_title == title:
+                return panel
 
     def parse_simple_panel(self, response, title):
         items = None
-        panels = response.css('div.blue-div')
-        for panel in panels:
-            panel_title = panel.css('h3::text').get()
-            if panel_title == title:
-                items = []
-                items_lis = panel.css('li')
-                for item_li in items_lis:
-                    spans = item_li.css('span')
-                    item = {
-                        'name': spans[0].css('::text').get()
-                    }
-                    dates = self.parse_dates(spans[1].css('::text').get())
-                    item['from_date'] = dates[0]
-                    item['to_date'] = dates[1] if len(dates) > 1 else None
-                    items.append(item)
+        panel = self.find_panel(response, title)
+        if panel:
+            items = []
+            items_lis = panel.css('li')
+            for item_li in items_lis:
+                spans = item_li.css('span')
+                item = {
+                    'name': spans[0].css('::text').get()
+                }
+                dates = self.parse_dates(spans[1].css('::text').get())
+                item['from_date'] = dates[0]
+                item['to_date'] = dates[1] if len(dates) > 1 else None
+                items.append(item)
         return items
+
+    def add_roles(self, response, title, offices):
+        panel = self.find_panel(response, title)
+        if panel:
+            items_lis = panel.css('li')
+            for item_li in items_lis:
+                spans = item_li.css('span')
+                item = {
+                    'name': spans[0].css('strong::text').get()
+                }
+                link_text = spans[0].css('a::text').get()
+                if link_text:
+                    office_name_container = link_text.strip()
+                else:
+                    office_name_container = spans[0].css('::text').getall()[-1].strip()
+
+                dates = self.parse_dates(spans[1].css('::text').get())
+                item['from_date'] = dates[0]
+                item['to_date'] = dates[1] if len(dates) > 1 else None
+                self.append_role_to_office(item, office_name_container, offices)
 
     def parse_roles_panel(self, response, title):
         items = None
-        panels = response.css('div.blue-div')
-        for panel in panels:
-            panel_title = panel.css('h3::text').get()
-            if panel_title == title:
-                items = []
-                items_lis = panel.css('li')
-                for item_li in items_lis:
-                    spans = item_li.css('span')
-                    item = {
-                        'role': spans[0].css('strong::text').get()
-                    }
-                    link_text = spans[0].css('a::text').get()
-                    if link_text:
-                        item['office'] = link_text.strip()
-                    else:
-                        item['office'] = spans[0].css('::text').getall()[-1].strip()
+        panel = self.find_panel(response, title)
+        if panel:
+            items = []
+            items_lis = panel.css('li')
+            for item_li in items_lis:
+                spans = item_li.css('span')
+                item = {
+                    'role': spans[0].css('strong::text').get()
+                }
+                link_text = spans[0].css('a::text').get()
+                if link_text:
+                    item['office'] = link_text.strip()
+                else:
+                    item['office'] = spans[0].css('::text').getall()[-1].strip()
 
-                    dates = self.parse_dates(spans[1].css('::text').get())
-                    item['from_date'] = dates[0]
-                    item['to_date'] = dates[1] if len(dates) > 1 else None
-                    items.append(item)
+                dates = self.parse_dates(spans[1].css('::text').get())
+                item['from_date'] = dates[0]
+                item['to_date'] = dates[1] if len(dates) > 1 else None
+                items.append(item)
         return items
 
     def get_legislatura_e_lettera(self, response: Response) -> Any:
@@ -228,3 +251,12 @@ class CameraSpider(Spider):
                     self.logger.exception('error parsing string %s', m)
                     raise e
         return dates
+
+    def append_role_to_office(self, role, office_name_container, offices):
+        for office in offices:
+            if office['name'] in office_name_container:
+                roles = office.get('roles', [])
+                roles.append(role)
+                office['roles'] = roles
+                return
+        raise NameError('impossibile assegnare il ruolo {} nell''ufficio {}'.format(role, office_name_container))
