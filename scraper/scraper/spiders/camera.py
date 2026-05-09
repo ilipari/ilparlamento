@@ -7,12 +7,7 @@ from scrapy.http import Response
 from scrapy.linkextractors import LinkExtractor
 import re
 
-
-def normalize_requested_legislature(legislature, ultima_legislatura):
-    normalized = []
-    if legislature:
-        normalized = map(lambda l: l if l > 0 else ultima_legislatura+l, legislature)
-    return set(normalized)
+from scraper.request import ParlamentoCrawlRequest
 
 
 def legislatura_from_url(url, legislatura_param='leg'):
@@ -37,8 +32,7 @@ class CameraSpider(Spider):
 
     def __init__(self, *args, **kwargs):
         super(CameraSpider, self).__init__(*args, **kwargs)
-        self.legislature = [0]
-        self.lettere = []
+        self.request = ParlamentoCrawlRequest({0}, ['Q'])
         self.date_fields =['DATA DI NASCITA', 'ELEZIONE CONVALIDATA', 'PROCLAMAZIONE']
 
     async def start(self):
@@ -47,16 +41,16 @@ class CameraSpider(Spider):
 
     def parse_start_url(self, response: Response, **kwargs: Any) -> Any:
         legislatura, _ = self.get_legislatura_e_lettera(response)
-        self.legislature = normalize_requested_legislature(self.legislature, legislatura)
+        self.request.normalize_legislature(legislatura)
 
         new_requests = self.parse_legislatura_landing_page(response) or []
-        requested_leg = self.legislature.copy()
+        requested_leg = self.request.legislature.copy()
         legislatura_links_extractor = LinkExtractor(allow=r"deputati\/elenco\?leg=\d+$")
         for link in legislatura_links_extractor.extract_links(response):
             leg = legislatura_from_url(link.url, 'leg')
             if leg in requested_leg:
                 requested_leg.remove(leg)
-            if self.is_requested(leg, None):
+            if self.request.is_included(leg):
                 if leg != legislatura:
                     self.logger.info('link to legislatura %d, following it', leg)
                     new_requests.append(response.follow(link, callback=self.parse_legislatura_landing_page))
@@ -75,16 +69,16 @@ class CameraSpider(Spider):
         # esplora link alle altre lettere per la legislatura corrente
         current_legislatura, current_lettera = self.get_legislatura_e_lettera(response)
         new_requests = self.parse_letter_index_page(response, current_legislatura, current_lettera) \
-            if self.is_requested(current_legislatura, current_lettera) \
+            if self.request.is_included(current_legislatura, current_lettera) \
             else []
 
-        requested_lettere = self.lettere.copy()
+        requested_lettere = self.request.lettere.copy()
         for link in CameraSpider.list_by_letter_link_extractor.extract_links(response):
             legislatura = legislatura_from_url(link.url, 'leg')
             lettera = parametro_from_url(link.url, 'lettera')
             if lettera in requested_lettere:
                 requested_lettere.remove(lettera)
-            if self.is_requested(legislatura, lettera):
+            if self.request.is_included(legislatura, lettera):
                 if lettera != current_lettera:
                     self.logger.info('link to legislatura %d and lettera %s - following it', legislatura, lettera)
                     follow = response.follow(
@@ -105,7 +99,7 @@ class CameraSpider(Spider):
 
     def parse_letter_index_page(self, response: Response, legislatura, lettera):
         new_requests = []
-        if self.is_requested(legislatura, lettera):
+        if self.request.is_included(legislatura, lettera):
             self.logger.info('index for legislatura %d and lettra %s - searching deputy links', legislatura, lettera)
             link_extractor = LinkExtractor(allow=r"deputati\/elenco\/\d+-\d+$", restrict_css='.deputato-info', strip=True)
             for link in link_extractor.extract_links(response):
@@ -230,14 +224,6 @@ class CameraSpider(Spider):
                 break
         iniziale = response.css('.a-selected::text').get().strip()
         return legislatura, iniziale
-
-    def is_requested(self, legislatura, lettera) -> bool:
-        requested = True
-        if legislatura and self.legislature:
-            requested = requested and legislatura in self.legislature
-        if lettera and self.lettere:
-            requested = requested and lettera in self.lettere
-        return requested
 
     def parse_dates(self, riga, date_regex=r"\d{1,2} \w+ \d{4}", date_pattern='%d %B %Y'):
         # Converte le date in oggetti date
