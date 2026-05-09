@@ -149,6 +149,7 @@ class CameraSpider(Spider):
         self.add_roles(response, 'INCARICHI NEI GRUPPI PARLAMENTARI', deputy['gruppi'])
         deputy['organi'] = self.parse_simple_panel(response, 'COMPONENTE DEGLI ORGANI PARLAMENTARI')
         self.add_roles(response, 'UFFICI PARLAMENTARI', deputy['organi'])
+        deputy['governo'] = self.parse_simple_panel(response, 'INCARICHI DI GOVERNO')
         return deputy
 
     def find_panel(self, response, title):
