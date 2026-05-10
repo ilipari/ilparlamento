@@ -32,8 +32,11 @@ class CameraSpider(Spider):
 
     def __init__(self, *args, **kwargs):
         super(CameraSpider, self).__init__(*args, **kwargs)
-        self.request = ParlamentoCrawlRequest({0}, ['Q'])
-        self.date_fields =['DATA DI NASCITA', 'ELEZIONE CONVALIDATA', 'PROCLAMAZIONE']
+        self.request = ParlamentoCrawlRequest({0}, ['B', 'M'], ['BITONCI', 'MELONI', 'MURA', 'MATONE'])
+        self.date_fields =['DATA DI NASCITA',
+                           'ELEZIONE CONVALIDATA',
+                           'PROCLAMAZIONE',
+                           'CESSAZIONE DAL MANDATO PARLAMENTARE']
 
     async def start(self):
         for url in self.start_urls:
@@ -104,15 +107,18 @@ class CameraSpider(Spider):
             link_extractor = LinkExtractor(allow=r"deputati\/elenco\/\d+-\d+$", restrict_css='.deputato-info', strip=True)
             for link in link_extractor.extract_links(response):
                 cognome_nome = link.text.strip()
-                self.logger.info('link to deputy %s in legislatura %d - following it', cognome_nome, legislatura)
-                follow = response.follow(
-                    link,
-                    callback=self.parse_deputato_page,
-                    cb_kwargs={
-                        'legislatura': legislatura,
-                        'cognome_nome': cognome_nome
-                    })
-                new_requests.append(follow)
+                if self.request.is_included(legislatura, lettera, cognome_nome):
+                    self.logger.info('link to deputy %s in legislatura %d - following it', cognome_nome, legislatura)
+                    follow = response.follow(
+                        link,
+                        callback=self.parse_deputato_page,
+                        cb_kwargs={
+                            'legislatura': legislatura,
+                            'cognome_nome': cognome_nome
+                        })
+                    new_requests.append(follow)
+                else:
+                    self.logger.info('link to deputy %s in legislatura %d - ignoring it cause was not requested', cognome_nome, legislatura)
         else:
             self.logger.debug('index for legislatura %d and lettra %s - ignoring it cause was not requested', legislatura, lettera)
         return new_requests

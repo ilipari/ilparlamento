@@ -29,14 +29,16 @@ class ParlamentoCrawlRequest:
             normalized = map(lambda l: l if l > 0 else ultima_legislatura + l, self.legislature)
             self.legislature = set(normalized)
 
-    def is_included(self, legislatura, lettera=None, name=None) -> bool:
+    def is_included(self, legislatura, lettera=None, name_to_check=None) -> bool:
         requested = True
         if legislatura and self.legislature:
             requested = requested and legislatura in self.legislature
         if lettera and self.lettere:
             requested = requested and lettera in self.lettere
-        if name and self.allowed_names:
-            requested = requested and name in self.allowed_names
-        if name and self.forbidden_names:
-            requested = requested and name not in self.forbidden_names
+        if name_to_check and self.allowed_names:
+            found = any(name in name_to_check for name in self.allowed_names)
+            requested = requested and found
+        if name_to_check and self.forbidden_names:
+            found = any(name in name_to_check for name in self.forbidden_names)
+            requested = requested and not found
         return requested
