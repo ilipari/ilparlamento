@@ -173,6 +173,25 @@ class CameraSpider(Spider):
                 dates = self.parse_dates(spans[1].css('::text').get())
                 item['from_date'] = dates[0]
                 item['to_date'] = dates[1] if len(dates) > 1 else None
+                # substitutions
+                if len(spans) > 2:
+                    subs_by = []
+                    subs_to = []
+                    for i in range(2, len(spans)):
+                        substitution = {}
+                        subs_parts = spans[i].css('::text').getall()
+                        substitution['cognome_nome'] = subs_parts[1]
+                        substitution['link'] = spans[i].css('a').attrib['href']
+                        dates = self.parse_dates(subs_parts[-1])
+                        substitution['from_date'] = dates[0]
+                        substitution['to_date'] = dates[1] if len(dates) > 1 else None
+                        if subs_parts[0].startswith('Sostituito da'):
+                            subs_by.append(substitution)
+                            item['subs_by'] = subs_by
+                        else:
+                            subs_to.append(substitution)
+                            item['subs_to'] = subs_to
+
                 items.append(item)
         return items
 
