@@ -35,7 +35,7 @@ Modificare i parametri nello spider per personalizzare lo scraping:
 
 ```python
 self.legislature = [-1, 19, 20]  # Legislature da estrarre (0 = ultima, -1 = penultima ...)
-self.lettere = ['K']              # Lettere iniziali dei cognomi
+self.letters = ['K']  # Lettere iniziali dei cognomi
 ```
 
 ### Struttura del progetto

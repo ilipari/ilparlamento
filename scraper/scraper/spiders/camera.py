@@ -7,7 +7,7 @@ from scrapy.http import Response
 from scrapy.linkextractors import LinkExtractor
 import re
 
-from scraper.request import ParlamentoCrawlRequest
+from ..request import ParlamentoCrawlRequest
 
 
 def legislatura_from_url(url, legislatura_param='leg'):
@@ -75,7 +75,7 @@ class CameraSpider(Spider):
             if self.request.is_included(current_legislatura, current_lettera) \
             else []
 
-        requested_lettere = self.request.lettere.copy()
+        requested_lettere = self.request.letters.copy()
         for link in CameraSpider.list_by_letter_link_extractor.extract_links(response):
             legislatura = legislatura_from_url(link.url, 'leg')
             lettera = parametro_from_url(link.url, 'lettera')
@@ -118,7 +118,7 @@ class CameraSpider(Spider):
                         })
                     new_requests.append(follow)
                 else:
-                    self.logger.info('link to deputy %s in legislatura %d - ignoring it cause was not requested', cognome_nome, legislatura)
+                    self.logger.debug('link to deputy %s in legislatura %d - ignoring it cause was not requested', cognome_nome, legislatura)
         else:
             self.logger.debug('index for legislatura %d and lettra %s - ignoring it cause was not requested', legislatura, lettera)
         return new_requests
@@ -271,4 +271,4 @@ class CameraSpider(Spider):
                 roles.append(role)
                 office['roles'] = roles
                 return
-        raise NameError('impossibile assegnare il ruolo {} nell''ufficio {}'.format(role, office_name_container))
+        raise NameError("impossibile assegnare il ruolo {} nell'ufficio {}".format(role['name'], office_name_container))
