@@ -8,6 +8,7 @@ from scrapy.linkextractors import LinkExtractor
 import re
 
 from ..request import ParlamentoCrawlRequest
+from ..strutils import substring_ignore_case
 
 
 def legislatura_from_url(url, legislatura_param='leg'):
@@ -29,10 +30,11 @@ class CameraSpider(Spider):
     start_urls = ['https://www.camera.it/deputati/elenco']
     list_by_letter_link_extractor = LinkExtractor(allow=r'deputati\/elenco\?leg=\d+&lettera=[a-zA-Z]$')
     date_parser = DateDataParser(languages=['it'])
+    default_office = 'CAMERA DEI DEPUTATI'
 
     def __init__(self, *args, **kwargs):
         super(CameraSpider, self).__init__(*args, **kwargs)
-        self.request = ParlamentoCrawlRequest({0}, ['B', 'M'], ['BITONCI', 'MELONI', 'MURA', 'MATONE'])
+        self.request = ParlamentoCrawlRequest({0}, ['B', 'M', 'f'], ['BITONCI', 'MELONI', 'MURA', 'MATONE', 'fontana'])
         self.date_fields =['DATA DI NASCITA',
                            'ELEZIONE CONVALIDATA',
                            'PROCLAMAZIONE',
@@ -271,4 +273,11 @@ class CameraSpider(Spider):
                 roles.append(role)
                 office['roles'] = roles
                 return
+        if substring_ignore_case(CameraSpider.default_office, office_name_container):
+            office = {
+                'name': CameraSpider.default_office,
+                'roles': [role]
+            }
+            offices.append(office)
+            return
         raise NameError("impossibile assegnare il ruolo {} nell'ufficio {}".format(role['name'], office_name_container))
