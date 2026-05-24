@@ -34,11 +34,11 @@ class CameraSpider(Spider):
 
     def __init__(self, *args, **kwargs):
         super(CameraSpider, self).__init__(*args, **kwargs)
-        self.request = ParlamentoCrawlRequest({0}, ['B', 'M', 'f'], ['BITONCI', 'MELONI', 'MURA', 'MATONE', 'fontana'])
-        self.date_fields =['DATA DI NASCITA',
-                           'ELEZIONE CONVALIDATA',
-                           'PROCLAMAZIONE',
-                           'CESSAZIONE DAL MANDATO PARLAMENTARE']
+        self.request = ParlamentoCrawlRequest({0})
+        self.date_fields = ['DATA DI NASCITA',
+                            'ELEZIONE CONVALIDATA',
+                            'PROCLAMAZIONE',
+                            'CESSAZIONE DAL MANDATO PARLAMENTARE']
 
     async def start(self):
         for url in self.start_urls:
@@ -129,8 +129,8 @@ class CameraSpider(Spider):
         nome_cognome = response.css('.deputato-nome::text').get().strip()
         self.logger.info('scraped deputy %s', nome_cognome)
         deputy = {
-            'nome_cognome': nome_cognome,
             'cognome_nome': cognome_nome,
+            'nome_cognome': nome_cognome,
             'legislatura': legislatura
         }
         # anagrafica
@@ -175,27 +175,48 @@ class CameraSpider(Spider):
                 dates = self.parse_dates(spans[1].css('::text').get())
                 item['from_date'] = dates[0]
                 item['to_date'] = dates[1] if len(dates) > 1 else None
-                # substitutions
+                # notes
                 if len(spans) > 2:
-                    subs_by = []
-                    subs_to = []
-                    for i in range(2, len(spans)):
-                        substitution = {}
-                        subs_parts = spans[i].css('::text').getall()
-                        substitution['cognome_nome'] = subs_parts[1]
-                        substitution['link'] = spans[i].css('a').attrib['href']
-                        dates = self.parse_dates(subs_parts[-1])
-                        substitution['from_date'] = dates[0]
-                        substitution['to_date'] = dates[1] if len(dates) > 1 else None
-                        if subs_parts[0].startswith('Sostituito da'):
-                            subs_by.append(substitution)
-                            item['subs_by'] = subs_by
-                        else:
-                            subs_to.append(substitution)
-                            item['subs_to'] = subs_to
+                    notes = self.parse_notes(spans[2:])
+                    item |= notes
 
                 items.append(item)
         return items
+
+    def parse_notes(self, spans):
+        subs_by = []
+        subs_to = []
+        deleghe = []
+        generic_notes = []
+        notes = {}
+        for span in spans:
+            note = {}
+            subs_parts = span.css('::text').getall()
+
+            dates = self.parse_dates(subs_parts[-1])
+            note['from_date'] = dates[0]
+            note['to_date'] = dates[1] if len(dates) > 1 else None
+            first_part = subs_parts[0]
+            # substitutions
+            if first_part.startswith('Sostituito da'):
+                note['cognome_nome'] = subs_parts[1]
+                note['link'] = span.css('a').attrib['href']
+                subs_by.append(note)
+                notes['subs_by'] = subs_by
+            elif first_part.startswith('In sostituzione'):
+                note['cognome_nome'] = subs_parts[1]
+                note['link'] = span.css('a').attrib['href']
+                subs_to.append(note)
+                notes['subs_to'] = subs_to
+            elif first_part.startswith('con delega'):
+                note['name'] = first_part[first_part.find('delega'): first_part.find('dal')].strip()
+                deleghe.append(note)
+                notes['deleghe'] = deleghe
+            else:
+                note['text'] = ''.join(subs_parts)
+                generic_notes.append(note)
+                notes['notes'] = generic_notes
+        return notes
 
     def add_roles(self, response, title, offices):
         panel = self.find_panel(response, title)
