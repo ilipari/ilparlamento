@@ -6,8 +6,11 @@ name = "pypi"
 [packages]
 scrapy = "*"
 dateparser = "*"
+pandas = "*"
+panel = "*"
 
 [dev-packages]
+watchfiles = "*"
 
 [requires]
 python_version = "3.12"
