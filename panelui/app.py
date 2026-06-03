@@ -1,11 +1,22 @@
 import panel as pn
 
-from service.data import get_dataframe
+from service.data import get_dataframe, data_index
 
 pn.extension()
 
-data = get_dataframe('camera', 17)
-component = pn.panel(data)
-print(component)
+legislature = data_index()['camera']
+select = pn.widgets.Select(label='Select', options=legislature)
+data_pane = pn.pane.DataFrame()
+root = pn.Column(
+    select,
+    data_pane,
+)
+root.servable(title='Il parlamento')
 
-component.servable()
+
+def update(legislature):
+    data_pane.object = get_dataframe('camera', legislature)
+
+
+pn.bind(update, select, watch=True)
+
