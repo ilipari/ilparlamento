@@ -11,6 +11,7 @@ panel = "*"
 
 [dev-packages]
 watchfiles = "*"
+jupyterlab = "*"
 
 [requires]
 python_version = "3.12"
